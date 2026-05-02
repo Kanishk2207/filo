@@ -1,0 +1,31 @@
+[package]
+name = "filo"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Your Downloads folder cleans itself — safely, predictably, and reversibly."
+license = "MIT OR Apache-2.0"
+readme = "readme.md"
+keywords = ["cli", "file", "organize", "downloads", "cleanup"]
+categories = ["command-line-utilities", "filesystem"]
+
+[dependencies]
+anyhow = "1.0.102"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4.6", features = ["derive"] }
+dialoguer = "0.12"
+dirs = "6.0"
+env_logger = "0.11"
+indicatif = "0.18"
+log = "0.4"
+notify = "8.1"
+serde = { version = "1.0.228", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "2.0"
+toml = "1.1"
+walkdir = "2.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
