@@ -5,12 +5,21 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use filo::config::{Config, DuplicateAction};
 use filo::organizer;
 
+static TMPDIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 fn tmpdir() -> std::path::PathBuf {
-    let base = std::env::temp_dir().join(format!("filo-test-{}", nanos()));
+    let seq = TMPDIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let base = std::env::temp_dir().join(format!(
+        "filo-test-{}-{}-{}",
+        std::process::id(),
+        nanos(),
+        seq
+    ));
     fs::create_dir_all(&base).unwrap();
     base
 }
