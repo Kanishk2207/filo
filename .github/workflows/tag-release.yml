@@ -1,0 +1,83 @@
+name: Tag Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  classify:
+    name: Classify Tag Channel
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.classify.outputs.prerelease }}
+      tag: ${{ steps.classify.outputs.tag }}
+      release_name: ${{ steps.classify.outputs.release_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch branch refs
+        run: git fetch origin '+refs/heads/*:refs/remotes/origin/*' --no-tags --prune
+
+      - name: Classify by branch ancestry
+        id: classify
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          COMMIT="${GITHUB_SHA}"
+          HAS_MAIN=false
+          HAS_DEVELOP=false
+
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            HAS_MAIN=true
+          fi
+
+          if git show-ref --verify --quiet refs/remotes/origin/develop; then
+            HAS_DEVELOP=true
+          fi
+
+          # Main has priority: tags on commits already promoted to main are stable.
+          if [ "$HAS_MAIN" = true ] && git merge-base --is-ancestor "$COMMIT" "origin/main"; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "release_name=filo ${TAG}" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_DEVELOP" = true ] && git merge-base --is-ancestor "$COMMIT" "origin/develop"; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "release_name=filo ${TAG} beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Tag commit is not reachable from origin/main or origin/develop."
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Publish GitHub Release
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish stable release
+        if: needs.classify.outputs.prerelease == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.classify.outputs.tag }}
+          name: ${{ needs.classify.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: false
+          make_latest: true
+
+      - name: Publish beta prerelease
+        if: needs.classify.outputs.prerelease == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.classify.outputs.tag }}
+          name: ${{ needs.classify.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: true
+          make_latest: false

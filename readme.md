@@ -1,5 +1,8 @@
 # filo
 
+[![CI](https://github.com/Kanishk2207/filo/actions/workflows/ci.yml/badge.svg)](https://github.com/Kanishk2207/filo/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > Your Downloads folder cleans itself — safely, predictably, and reversibly.
 
 `filo` is a cross-platform command-line tool that organizes files in folders
@@ -29,7 +32,11 @@ It is built on three promises:
 - [Safety guarantees](#safety-guarantees)
 - [Preview mode, in detail](#preview-mode-in-detail)
 - [Logging](#logging)
+- [Release plan](#release-plan)
 - [Contributing](#contributing)
+- [Support](SUPPORT.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
 - [License](#license)
 
 ---
@@ -58,7 +65,7 @@ If you don't have Rust installed yet, follow the official steps:
 [Install Rust](https://www.rust-lang.org/tools/install).
 
 ```bash
-git clone https://github.com/your/filo
+git clone https://github.com/Kanishk2207/filo
 cd filo
 cargo install --path .
 ```
@@ -373,6 +380,15 @@ filo writes to both stderr and an append-only log file.
 
 ## Contributing
 
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution workflow, PR checklist, and reporting guidance.
+
+Branch strategy:
+
+- Open feature PRs into `develop`.
+- Treat `develop` as beta/integration.
+- Promote to `main` only after beta validation passes.
+- Tag `develop` commits for prereleases (for example `v0.2.0-beta.1`) and `main` commits for stable releases (for example `v0.2.0`).
+
 filo is structured as a library (`filo` in `src/lib.rs`) plus a thin binary
 (`src/main.rs`). The binary only parses arguments and dispatches; all
 behavior lives in the library, which makes it straightforward to:
@@ -426,13 +442,13 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+By participating, you agree to follow [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
 ---
 
 ## License
 
-Licensed under either of
+Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+- MIT license ([LICENSE](LICENSE))
+- Apache License, Version 2.0 ([Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0))

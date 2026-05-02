@@ -1,0 +1,21 @@
+name: Main Promotion Guard
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  require-develop-head:
+    name: Require develop -> main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce source branch
+        run: |
+          echo "PR head branch: ${{ github.head_ref }}"
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::PRs into main must come from the develop branch."
+            exit 1
+          fi

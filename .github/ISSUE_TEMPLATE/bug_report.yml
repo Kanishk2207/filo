@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible bug in filo
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report.
+        Please include enough detail for someone else to reproduce the issue quickly.
+
+  - type: input
+    id: version
+    attributes:
+      label: filo version
+      description: Output of `filo --version`
+      placeholder: "filo 0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: OS version (for example macOS 14.5, Ubuntu 24.04, Windows 11)
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      description: Exact command(s) and flags you used
+      placeholder: |
+        filo scan --rename
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create file ...
+        2. Run command ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs/output
+      description: Paste key logs or error output (redact private info)
+      render: shell
