@@ -15,11 +15,14 @@ use crate::errors::OrganizerError;
 
 /// Build `dir/stem.ext`, leaving the extension off if `ext` is `None`.
 pub fn build_dest(dir: &Path, stem: &str, ext: Option<&str>) -> PathBuf {
-    let mut p = dir.join(stem);
-    if let Some(e) = ext {
-        p.set_extension(e);
+    let ext = ext
+        .map(str::trim)
+        .map(|e| e.trim_start_matches('.'))
+        .filter(|e| !e.is_empty());
+    match ext {
+        Some(e) => dir.join(format!("{stem}.{e}")),
+        None => dir.join(stem),
     }
-    p
 }
 
 /// Find the first non-existent path in the strict priority order:
@@ -129,4 +132,84 @@ fn short_hash(stem: &str) -> String {
         s.push_str(&format!("{:02x}", b));
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::{build_dest, unique_destination};
+
+    #[test]
+    fn build_dest_preserves_dotted_stem() {
+        let path = build_dest(
+            Path::new("/tmp"),
+            "kanishk.shrivastava_credentials",
+            Some("csv"),
+        );
+        assert_eq!(
+            path,
+            Path::new("/tmp").join("kanishk.shrivastava_credentials.csv")
+        );
+    }
+
+    #[test]
+    fn build_dest_preserves_timestamp_like_stem() {
+        let path = build_dest(
+            Path::new("/tmp"),
+            "WhatsApp Image 2026-05-02 at 21.35.38",
+            Some("jpeg"),
+        );
+        assert_eq!(
+            path,
+            Path::new("/tmp").join("WhatsApp Image 2026-05-02 at 21.35.38.jpeg")
+        );
+    }
+
+    #[test]
+    fn build_dest_normalizes_dot_prefixed_or_blank_extension() {
+        assert_eq!(
+            build_dest(
+                Path::new("/tmp"),
+                "kanishk.shrivastava_credentials",
+                Some(".csv")
+            ),
+            Path::new("/tmp").join("kanishk.shrivastava_credentials.csv")
+        );
+        assert_eq!(
+            build_dest(
+                Path::new("/tmp"),
+                "kanishk.shrivastava_credentials",
+                Some(" ")
+            ),
+            Path::new("/tmp").join("kanishk.shrivastava_credentials")
+        );
+    }
+
+    #[test]
+    fn unique_destination_keeps_dotted_stem_across_collision_suffixes() {
+        let dir = std::env::temp_dir().join(format!("filo-mover-test-{}", nanos()));
+        fs::create_dir_all(&dir).unwrap();
+        let stem = "WhatsApp Image 2026-05-02 at 21.35.38";
+        let ext = "jpeg";
+        let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+        let base = dir.join(format!("{stem}.{ext}"));
+        let dated = dir.join(format!("{stem}-{date}.{ext}"));
+        fs::write(&base, b"a").unwrap();
+        fs::write(&dated, b"b").unwrap();
+
+        let dest = unique_destination(&dir, stem, Some(ext)).unwrap();
+        assert_eq!(dest, dir.join(format!("{stem}-{date}-1.{ext}")));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn nanos() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    }
 }

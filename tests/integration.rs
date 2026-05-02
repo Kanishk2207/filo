@@ -229,3 +229,75 @@ fn config_with_folders_roundtrips() {
     assert_eq!(loaded.watch.folders[0], root.join("A"));
     assert_eq!(loaded.watch.folders[1], root.join("B"));
 }
+
+#[test]
+fn rename_disabled_avoids_no_unique_name_for_dotted_real_world_patterns() {
+    let root = tmpdir();
+    let mut cfg = test_config(&root);
+    cfg.rename.enabled = false;
+
+    let fixtures: [(&str, &[u8]); 7] = [
+        ("Screenshot 2026-02-17 at 12.18.55 PM.jpg", b"a"),
+        ("Screenshot 2026-02-17 at 12.18.49 PM.jpg", b"b"),
+        ("WhatsApp Image 2026-05-02 at 21.35.38.jpeg", b"c"),
+        ("WhatsApp Image 2026-05-02 at 21.35.38 (1).jpeg", b"d"),
+        ("WhatsApp Image 2026-05-02 at 21.35.37.jpeg", b"e"),
+        ("kanishk.shrivastava_credentials.csv", b"f"),
+        ("kanishk.shrivastava_accessKeys_dummy_acc.csv", b"g"),
+    ];
+
+    for (name, bytes) in fixtures {
+        write(&root.join(name), bytes);
+    }
+
+    for (name, _) in fixtures {
+        let src = root.join(name);
+        let plan = organizer::plan(&src, &root, &cfg)
+            .unwrap_or_else(|e| panic!("plan failed for {}: {}", src.display(), e));
+
+        let destination = match &plan.action {
+            organizer::Action::Move { destination } => destination.clone(),
+            other => panic!("expected Move for {}, got {:?}", src.display(), other),
+        };
+
+        let dest_name = destination
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        if name.contains("12.18.49") {
+            assert!(
+                dest_name.contains("12.18.49"),
+                "expected destination to preserve timestamp segment for {}, got {}",
+                name,
+                dest_name
+            );
+        }
+        if name.contains("21.35.38 (1)") {
+            assert!(
+                dest_name.contains("21.35.38 (1)"),
+                "expected destination to preserve whatsapp stem for {}, got {}",
+                name,
+                dest_name
+            );
+        }
+        if name.contains("21.35.37") {
+            assert!(
+                dest_name.contains("21.35.37"),
+                "expected destination to preserve whatsapp stem for {}, got {}",
+                name,
+                dest_name
+            );
+        }
+        if name.contains("kanishk.shrivastava_accessKeys_dummy_acc") {
+            assert!(
+                dest_name.contains("kanishk.shrivastava_accessKeys_dummy_acc"),
+                "expected destination to preserve dotted csv stem for {}, got {}",
+                name,
+                dest_name
+            );
+        }
+
+        organizer::execute(&plan).unwrap();
+    }
+}
