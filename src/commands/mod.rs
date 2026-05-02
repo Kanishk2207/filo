@@ -5,7 +5,11 @@
 //! logic lives here — that belongs in `organizer`, `watcher`, `config`.
 
 pub mod arrange;
+pub mod autostart;
 pub mod init;
 pub mod preview;
+pub mod refresh;
 pub mod scan;
 pub mod start;
+pub mod stop;
+pub mod watch_cmd;

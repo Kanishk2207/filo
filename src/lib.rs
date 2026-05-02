@@ -10,16 +10,20 @@
 //! - [`cli`]        — clap argument definitions (no logic).
 //! - [`commands`]   — one module per `filo <verb>`; orchestrates the engine.
 //! - [`config`]     — on-disk config schema, load / save.
+//! - [`daemon`]     — PID file, spawn, kill, reload signal.
 //! - [`errors`]     — typed errors per domain.
 //! - [`logging`]    — env_logger + file output setup.
 //! - [`organizer`]  — the engine: rules, renaming, duplicate detection, safe move.
-//! - [`watcher`]    — debounced notify-based folder watcher.
+//! - [`watcher`]    — debounced notify-based folder watcher with hot-reload.
 
-#![forbid(unsafe_code)]
+// `deny` rather than `forbid` so that the `daemon` module can locally
+// `allow` the two narrow unsafe blocks it needs (libc::setsid, libc::kill).
+#![deny(unsafe_code)]
 
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod daemon;
 pub mod errors;
 pub mod logging;
 pub mod organizer;

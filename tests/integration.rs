@@ -4,7 +4,7 @@
 //! filesystem in a temp directory, with no CLI or config-file layer.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use filo::config::{Config, DuplicateAction};
 use filo::organizer;
@@ -187,4 +187,45 @@ fn config_roundtrips_through_toml() {
     assert!(loaded.rename.enabled);
     assert_eq!(loaded.duplicates.action, DuplicateAction::Move);
     assert!(loaded.rules.contains_key("Documents"));
+}
+
+// ── Config folder management ───────────────────────────────────────────
+
+#[test]
+fn add_folder_deduplicates() {
+    let mut cfg = Config::default();
+    let p = PathBuf::from("/tmp/filo-test-add-folder");
+    assert!(cfg.add_folder(p.clone()));
+    assert!(!cfg.add_folder(p.clone()), "second add should be no-op");
+    assert_eq!(cfg.watch.folders.len(), 1);
+}
+
+#[test]
+fn remove_folder_returns_false_when_absent() {
+    let mut cfg = Config::default();
+    assert!(!cfg.remove_folder(Path::new("/nonexistent")));
+}
+
+#[test]
+fn add_then_remove_folder() {
+    let mut cfg = Config::default();
+    let p = PathBuf::from("/tmp/filo-test-add-remove");
+    cfg.add_folder(p.clone());
+    assert!(cfg.remove_folder(&p));
+    assert!(cfg.watch.folders.is_empty());
+}
+
+#[test]
+fn config_with_folders_roundtrips() {
+    let root = tmpdir();
+    let path = root.join("config.toml");
+    let mut cfg = Config::default();
+    cfg.add_folder(root.join("A"));
+    cfg.add_folder(root.join("B"));
+    cfg.save_to(&path).unwrap();
+
+    let loaded = Config::load_from(&path).unwrap();
+    assert_eq!(loaded.watch.folders.len(), 2);
+    assert_eq!(loaded.watch.folders[0], root.join("A"));
+    assert_eq!(loaded.watch.folders[1], root.join("B"));
 }

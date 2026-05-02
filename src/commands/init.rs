@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 
 use crate::config::{Config, DuplicateAction};
-use crate::watcher;
+use crate::daemon;
 
 pub fn run() -> Result<()> {
     let theme = ColorfulTheme::default();
@@ -75,8 +75,14 @@ pub fn run() -> Result<()> {
 
     if config.watch.auto_start {
         println!();
-        println!("Starting watcher...");
-        watcher::run(&config)?;
+        daemon::spawn_daemon().context("starting daemon")?;
+        match daemon::running_pid() {
+            Some(pid) => println!(
+                "Watcher started in background (PID {}). Use `filo stop` to stop it.",
+                pid
+            ),
+            None => println!("Watcher started in background. Use `filo stop` to stop it."),
+        }
     }
 
     Ok(())

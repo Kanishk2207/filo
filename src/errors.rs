@@ -81,4 +81,38 @@ pub enum WatcherError {
 
     #[error("watcher channel disconnected unexpectedly")]
     Disconnected,
+
+    #[error("daemon error: {0}")]
+    Daemon(#[from] DaemonError),
+}
+
+#[derive(Debug, Error)]
+pub enum DaemonError {
+    #[error("filo daemon is already running (PID {0})")]
+    AlreadyRunning(u32),
+
+    #[error("filo daemon is not running")]
+    NotRunning,
+
+    #[error("could not determine data directory for this platform")]
+    NoDataDir,
+
+    #[error("failed to spawn daemon process: {source}")]
+    SpawnFailed {
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("PID file is corrupt or unreadable: {path}")]
+    PidFileCorrupt { path: PathBuf },
+
+    #[error("failed to kill daemon (PID {pid}): {source}")]
+    KillFailed {
+        pid: u32,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }

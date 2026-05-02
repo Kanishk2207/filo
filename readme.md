@@ -25,6 +25,7 @@ It is built on three promises:
 - [First-time setup](#first-time-setup)
 - [Commands](#commands)
 - [Config file](#config-file)
+- [TOML option reference](docs/toml-config-reference.md)
 - [Safety guarantees](#safety-guarantees)
 - [Preview mode, in detail](#preview-mode-in-detail)
 - [Logging](#logging)
@@ -102,16 +103,65 @@ rebuild the config; existing configs are never silently overwritten.
 
 ## Commands
 
-| Command           | What it does                                                         |
-|-------------------|----------------------------------------------------------------------|
-| `filo init`       | Interactive first-time setup. Writes `config.toml`.                  |
-| `filo preview`    | Dry run: print every move filo _would_ make. No changes on disk.     |
-| `filo scan`       | Organize files already sitting in your configured watch folders.     |
-| `filo start`      | Watch configured folders and organize new files as they arrive.      |
-| `filo arrange`    | Manual, targeted move: pick files by keyword/extension and move them. |
+| Command                     | What it does                                                         |
+|-----------------------------|----------------------------------------------------------------------|
+| `filo init`                 | Interactive first-time setup. Writes `config.toml`.                  |
+| `filo start`                | Scan existing files, then start the background watcher daemon.       |
+| `filo stop`                 | Stop the background watcher daemon.                                  |
+| `filo refresh`              | Hot-reload config without restarting the daemon.                     |
+| `filo scan`                 | Organize files already sitting in your configured watch folders.     |
+| `filo preview`              | Dry run: print every move filo _would_ make. No changes on disk.    |
+| `filo arrange`              | Manual, targeted move: pick files by keyword/extension and move them.|
+| `filo watch add <path>...`  | Add folder(s) to the watch list.                                     |
+| `filo watch remove <path>...` | Remove folder(s) from the watch list.                             |
+| `filo watch list`           | Show currently watched folders.                                      |
+| `filo autostart enable`     | Install filo as an OS login service.                                 |
+| `filo autostart disable`    | Remove the OS login service.                                         |
+| `filo autostart status`     | Check if autostart is enabled.                                       |
 
 Most commands accept `--rename` to enable smart renaming for that run only,
 independently of the config.
+
+### Daemon lifecycle
+
+`filo start` runs an initial scan of existing files, then spawns a background
+daemon that watches your configured folders in real time. The daemon survives
+closing the terminal.
+
+```bash
+filo start                 # scan + start daemon
+filo start --no-scan       # skip the initial scan
+filo start --foreground    # run in the current terminal (for debugging or service managers)
+filo stop                  # stop the daemon
+filo refresh               # hot-reload config without restarting
+```
+
+`filo refresh` is zero-downtime: the daemon re-reads `config.toml`, tears
+down old watches, and sets up new ones without restarting the process. There
+is no gap in monitoring.
+
+### Managing watch folders
+
+You don't need to edit `config.toml` by hand to add or remove folders:
+
+```bash
+filo watch add ~/Downloads ~/Desktop
+filo watch remove ~/Desktop
+filo watch list
+```
+
+If the daemon is running, changes take effect immediately (an automatic
+`filo refresh` is triggered).
+
+### Autostart on login
+
+Install filo as a login service so it starts automatically when you log in:
+
+```bash
+filo autostart enable      # macOS: launchd | Linux: systemd | Windows: registry
+filo autostart disable
+filo autostart status
+```
 
 ### Examples
 
@@ -133,7 +183,7 @@ Run with smart renaming turned on, ignoring whatever's in the config:
 filo scan --rename
 ```
 
-Start the live watcher in the background:
+Start the background watcher:
 
 ```bash
 filo start
@@ -171,6 +221,9 @@ crate). It never hardcodes `/home/...` or `C:\Users\...`.
 
 The file is human-readable TOML. Edit it freely — filo will pick up your
 changes on the next run.
+
+For a complete, field-by-field reference of every supported TOML option,
+see [docs/toml-config-reference.md](docs/toml-config-reference.md).
 
 ### Annotated example
 
@@ -290,6 +343,32 @@ filo writes to both stderr and an append-only log file.
 
 ---
 
+## Release plan
+
+### Next release
+
+1. **Undo last action**
+   Add a command to roll back the most recent organize/arrange action safely.
+2. **Configurable scan depth**
+   Add depth controls so scans can include child/nested folders, either via
+   config or runtime prompts/flags.
+3. **Path-first command usage**
+   Allow running filo directly on paths without changing directories first
+   (for example: `filo <path> <options>`).
+4. **Keyword match mode in `arrange`**
+   Add a match mode option so multiple keywords can be evaluated as OR or AND.
+
+### Next-to-next release
+
+1. **Undo/redo**
+   Extend rollback support to full undo/redo flows.
+2. **Undo/redo tree**
+   Represent operation history as a navigable tree (not just a linear stack).
+3. **Undo/redo tree visualization**
+   Add a visual history view for that tree, inspired by Emacs-style workflows.
+
+---
+
 ## Contributing
 
 filo is structured as a library (`filo` in `src/lib.rs`) plus a thin binary
@@ -309,14 +388,19 @@ src/
   main.rs          # binary entry point — parse CLI, dispatch
   lib.rs           # library root — public API
   cli.rs           # clap definitions (no logic)
+  daemon.rs        # PID file, spawn, kill, reload signal
   errors.rs        # thiserror types per domain
   logging.rs       # env_logger + file output
   commands/        # one module per `filo <verb>`
     init.rs
-    start.rs
+    start.rs       # scan-then-daemon flow
+    stop.rs
+    refresh.rs
     scan.rs
     preview.rs
     arrange.rs
+    watch_cmd.rs   # add/remove/list watch folders
+    autostart.rs   # OS-specific login service (launchd/systemd/registry)
   config/          # on-disk config schema + defaults
     mod.rs
     defaults.rs
@@ -327,7 +411,7 @@ src/
     renamer.rs     # smart rename pipeline
     duplicates.rs  # size + SHA-256 duplicate check
   watcher/
-    mod.rs         # debounced notify-based watcher
+    mod.rs         # debounced notify-based watcher with hot-reload
 tests/
   integration.rs   # end-to-end pipeline tests
 ```

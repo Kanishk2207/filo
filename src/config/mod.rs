@@ -194,4 +194,22 @@ impl Config {
         })?;
         Ok(())
     }
+
+    /// Add a folder to the watch list. Returns `true` if it was actually
+    /// added (i.e. not already present).
+    pub fn add_folder(&mut self, path: PathBuf) -> bool {
+        if self.watch.folders.iter().any(|p| p == &path) {
+            return false;
+        }
+        self.watch.folders.push(path);
+        true
+    }
+
+    /// Remove a folder from the watch list. Returns `true` if it was
+    /// actually removed (i.e. was present).
+    pub fn remove_folder(&mut self, path: &Path) -> bool {
+        let before = self.watch.folders.len();
+        self.watch.folders.retain(|p| p != path);
+        self.watch.folders.len() < before
+    }
 }
