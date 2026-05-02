@@ -54,6 +54,8 @@ point.
 ### From source
 
 Requires Rust `1.85` or newer.
+If you don't have Rust installed yet, follow the official steps:
+[Install Rust](https://www.rust-lang.org/tools/install).
 
 ```bash
 git clone https://github.com/your/filo
