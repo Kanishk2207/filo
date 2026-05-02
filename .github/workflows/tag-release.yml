@@ -62,7 +62,7 @@ jobs:
     steps:
       - name: Publish stable release
         if: needs.classify.outputs.prerelease == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.classify.outputs.tag }}
           name: ${{ needs.classify.outputs.release_name }}
@@ -73,7 +73,7 @@ jobs:
 
       - name: Publish beta prerelease
         if: needs.classify.outputs.prerelease == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.classify.outputs.tag }}
           name: ${{ needs.classify.outputs.release_name }}
