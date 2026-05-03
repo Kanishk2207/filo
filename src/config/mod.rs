@@ -29,6 +29,17 @@ pub struct Config {
     #[serde(default)]
     pub duplicates: DuplicatesConfig,
 
+    /// Ordered keyword-routing rules. Evaluated top-to-bottom.
+    ///
+    /// If a filename matches any keyword in a rule, that rule's `to`
+    /// category wins before extension-based routing is considered.
+    #[serde(
+        default,
+        alias = "keyword_rule",
+        skip_serializing_if = "KeywordRuleConfig::is_empty"
+    )]
+    pub keyword_rules: KeywordRuleConfig,
+
     /// Category → list of lowercase extensions (without the leading dot).
     #[serde(default = "defaults::default_rules")]
     pub rules: BTreeMap<String, Vec<String>>,
@@ -83,6 +94,25 @@ pub enum DuplicateAction {
     Move,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KeywordRule {
+    pub to: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct KeywordRuleConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<KeywordRule>,
+}
+
+impl KeywordRuleConfig {
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+}
+
 fn default_other_category() -> String {
     defaults::DEFAULT_OTHER_CATEGORY.to_string()
 }
@@ -106,6 +136,7 @@ impl Default for Config {
             watch: WatchConfig::default(),
             rename: RenameConfig::default(),
             duplicates: DuplicatesConfig::default(),
+            keyword_rules: KeywordRuleConfig::default(),
             rules: defaults::default_rules(),
         }
     }

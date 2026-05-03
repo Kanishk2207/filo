@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use filo::config::{Config, DuplicateAction};
+use filo::config::{Config, DuplicateAction, KeywordRule, KeywordRuleConfig};
 use filo::organizer;
 
 static TMPDIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -55,6 +55,100 @@ fn routes_by_extension() {
     match plan.action {
         organizer::Action::Move { destination } => {
             assert_eq!(destination, root.join("Documents").join("hello.pdf"));
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn keyword_rule_overrides_extension_rule() {
+    let root = tmpdir();
+    let src = root.join("invoice.png");
+    write(&src, b"img");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule {
+        to: "Documents".to_string(),
+        keywords: vec!["invoice".to_string()],
+    });
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(destination, root.join("Documents").join("invoice.png"));
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn keyword_rules_are_case_insensitive() {
+    let root = tmpdir();
+    let src = root.join("Monthly-RECEIPT.jpg");
+    write(&src, b"img");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule {
+        to: "Documents".to_string(),
+        keywords: vec!["receipt".to_string()],
+    });
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(
+                destination.parent().unwrap().file_name().unwrap(),
+                "Documents"
+            );
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn keyword_rules_trim_surrounding_spaces() {
+    let root = tmpdir();
+    let src = root.join("invoice-final.png");
+    write(&src, b"img");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule {
+        to: "Documents".to_string(),
+        keywords: vec!["  invoice  ".to_string()],
+    });
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(
+                destination,
+                root.join("Documents").join("invoice-final.png")
+            );
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn keyword_rule_order_decides_conflicts() {
+    let root = tmpdir();
+    let src = root.join("amazon_invoice.pdf");
+    write(&src, b"doc");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule {
+        to: "Amazon".to_string(),
+        keywords: vec!["amazon".to_string()],
+    });
+    cfg.keyword_rules.rules.push(KeywordRule {
+        to: "Documents".to_string(),
+        keywords: vec!["invoice".to_string()],
+    });
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(destination, root.join("Amazon").join("amazon_invoice.pdf"));
         }
         other => panic!("expected Move, got {:?}", other),
     }
@@ -188,6 +282,18 @@ fn config_roundtrips_through_toml() {
     original.watch.folders = vec![root.join("Downloads")];
     original.rename.enabled = true;
     original.duplicates.action = DuplicateAction::Move;
+    original.keyword_rules = KeywordRuleConfig {
+        rules: vec![
+            KeywordRule {
+                to: "Amazon".to_string(),
+                keywords: vec!["amazon".to_string()],
+            },
+            KeywordRule {
+                to: "Documents".to_string(),
+                keywords: vec!["invoice".to_string(), "receipt".to_string()],
+            },
+        ],
+    };
 
     original.save_to(&path).unwrap();
     let loaded = Config::load_from(&path).unwrap();
@@ -195,6 +301,7 @@ fn config_roundtrips_through_toml() {
     assert_eq!(loaded.watch.folders, original.watch.folders);
     assert!(loaded.rename.enabled);
     assert_eq!(loaded.duplicates.action, DuplicateAction::Move);
+    assert_eq!(loaded.keyword_rules, original.keyword_rules);
     assert!(loaded.rules.contains_key("Documents"));
 }
 

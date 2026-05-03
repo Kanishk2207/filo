@@ -50,9 +50,9 @@ later they're impossible to navigate. Manual cleanup is a chore nobody does.
 `filo` is a small, boring, reliable tool that does the chore for you.
 
 It is deliberately not clever. It does not look inside files, call machine
-learning models, or invent names. It routes by extension, dedupes by SHA-256,
-and moves things into subfolders. That's the whole product — and that's the
-point.
+learning models, or invent names. It routes by keyword/extension, dedupes by
+SHA-256, and moves things into subfolders. That's the whole product — and
+that's the point.
 
 ---
 
@@ -268,9 +268,17 @@ prepend_date = false
 action = "skip"
 folder_name = "Duplicates"
 
+# Optional ordered keyword routing in one block (first match wins):
+[keyword_rules]
+rules = [
+  { to = "Amazon", keywords = ["amazon"] },
+  { to = "Documents", keywords = ["invoice", "receipt", "statement"] },
+]
+
 [rules]
 # Category -> list of extensions (no leading dot). Case-insensitive.
 # Add/remove freely. Unknown extensions fall through to `other_category`.
+# Used only when no keyword rule matched.
 Archives  = ["zip", "tar", "gz", "bz2", "xz", "rar", "7z", "tgz"]
 Audio     = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus"]
 Code      = ["rs", "py", "js", "ts", "go", "c", "cpp", "h", "java", "rb", "sh"]
