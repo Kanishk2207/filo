@@ -4,11 +4,13 @@
 //! writes it to the platform config path, and optionally hands off to the
 //! watcher.
 
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
+use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect, Select};
 
+use crate::commands::scan;
 use crate::config::{Config, DuplicateAction};
 use crate::daemon;
 
@@ -75,6 +77,14 @@ pub fn run() -> Result<()> {
 
     if config.watch.auto_start {
         println!();
+        let scan_first = Confirm::with_theme(&theme)
+            .with_prompt("Run an initial scan before starting watcher?")
+            .default(true)
+            .interact()?;
+        if scan_first {
+            scan::run(&config, false).context("running initial scan before watcher start")?;
+            println!();
+        }
         daemon::spawn_daemon().context("starting daemon")?;
         match daemon::running_pid() {
             Some(pid) => println!(
@@ -119,9 +129,7 @@ fn choose_folders(theme: &ColorfulTheme) -> Result<Vec<PathBuf>> {
         if !add_more {
             break;
         }
-        let raw: String = Input::with_theme(theme)
-            .with_prompt("Absolute path to folder")
-            .interact_text()?;
+        let raw = prompt_line("Absolute path to folder")?;
         let path = PathBuf::from(raw.trim());
         if path.is_dir() {
             chosen.push(path);
@@ -131,6 +139,27 @@ fn choose_folders(theme: &ColorfulTheme) -> Result<Vec<PathBuf>> {
     }
 
     Ok(chosen)
+}
+
+/// Read a single line using the terminal's canonical line mode.
+///
+/// This avoids key-by-key input handling glitches seen in tmux paste flows
+/// with some prompt renderers.
+fn prompt_line(prompt: &str) -> Result<String> {
+    eprint!("? {} › ", prompt);
+    io::stderr().flush().context("flushing prompt")?;
+
+    let mut raw = String::new();
+    let read = io::stdin()
+        .read_line(&mut raw)
+        .context("reading prompt input")?;
+    if read == 0 {
+        anyhow::bail!("stdin closed while reading prompt input");
+    }
+
+    let value = raw.trim_end_matches(['\r', '\n']).to_string();
+    eprintln!("✔ {} · {}", prompt, value);
+    Ok(value)
 }
 
 /// Platform-neutral suggestions via `dirs` — never hardcode `/home` or

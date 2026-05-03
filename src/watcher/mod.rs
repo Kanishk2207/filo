@@ -132,9 +132,10 @@ fn record(event: Event, pending: &mut HashMap<PathBuf, Instant>) {
                 if organizer::should_skip(&path) {
                     continue;
                 }
-                if path.is_file() {
-                    pending.insert(path, now);
-                }
+                // Do not gate on `is_file()` here: for some backends a create
+                // event can arrive before the filesystem reflects the new file.
+                // `process()` re-checks `is_file()` after debounce.
+                pending.insert(path, now);
             }
         }
         _ => {}
@@ -211,5 +212,23 @@ fn announce(plan: &organizer::Plan) {
                 of.display()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::CreateKind;
+
+    #[test]
+    fn record_enqueues_create_even_if_path_not_present_yet() {
+        let mut pending: HashMap<PathBuf, Instant> = HashMap::new();
+        let path =
+            std::env::temp_dir().join(format!("filo-watcher-record-test-{}", std::process::id()));
+        let event = Event::new(EventKind::Create(CreateKind::File)).add_path(path.clone());
+
+        record(event, &mut pending);
+
+        assert!(pending.contains_key(&path));
     }
 }

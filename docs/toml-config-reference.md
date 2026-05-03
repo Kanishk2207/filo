@@ -40,6 +40,13 @@ prepend_date = false
 action = "skip"
 folder_name = "Duplicates"
 
+# Optional keyword routing in one block (first match wins):
+# [keyword_rules]
+# rules = [
+#   { to = "Amazon", keywords = ["amazon"] },
+#   { to = "Documents", keywords = ["invoice", "receipt", "statement"] },
+# ]
+
 [rules]
 Archives  = ["zip", "tar", "gz", "bz2", "xz", "rar", "7z", "tgz"]
 Audio     = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus"]
@@ -63,6 +70,7 @@ Videos    = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"]
 | `rename.prepend_date` | `bool` | `false` | `scan`, `start` (when `rename.enabled=true`) |
 | `duplicates.action` | `"skip" \| "move"` | `"skip"` | `scan`, `preview`, `start` |
 | `duplicates.folder_name` | `string` | `"Duplicates"` | `scan`, `preview`, `start` (when `duplicates.action="move"`) |
+| `keyword_rules.rules` | `array<table>` | `[]` | `scan`, `preview`, `start` |
 | `rules.<Category>` | `array<string(extension)>` | built-in per category | `scan`, `preview`, `start` |
 
 ## Detailed reference
@@ -175,12 +183,34 @@ All fields in this section are ignored unless `rename.enabled = true`.
 - Runtime behavior:
   Duplicate destination is `<category-dir>/<duplicates.folder_name>/...`.
 
+### `[keyword_rules]`
+
+#### `keyword_rules.rules`
+
+- Type: `array<table>`
+- Default: `[]`
+- Meaning:
+  Ordered keyword routing rules evaluated before extension rules.
+- Runtime behavior:
+  - Rules are evaluated top-to-bottom, first matching rule wins.
+  - Filename matching is case-insensitive substring matching.
+  - Match mode is OR within each rule (`any` keyword hit matches).
+  - Empty `to` values and empty keywords are ignored.
+  - If no keyword rule matches, routing falls through to `[rules]`.
+- Rule fields:
+  - `to` (`string`): destination category/folder name.
+  - `keywords` (`array<string>`): match keywords for that rule.
+- Example:
+  `[keyword_rules]` with
+  `rules = [{ to = "Documents", keywords = ["invoice", "receipt"] }]`
+  routes `May_RECEIPT.png` to `Documents` with first-match precedence.
+
 ### `[rules]`
 
 - Type: map/table of category name -> extension list
 - Default: built-in categories from `src/config/defaults.rs`
 - Meaning:
-  Routes files by extension to category folder.
+  Routes files by extension to category folder when no keyword rule matched.
 - Runtime behavior:
   - Extension matching is case-insensitive.
   - Files without extensions fall back to `other_category`.
@@ -204,7 +234,7 @@ These are the built-in defaults used when no custom rules are set:
 
 ## What config does not control (today)
 
-- `arrange` command filters (`--keyword`, `--extension`) are CLI options, not TOML.
+- `arrange` command filters (`--keyword`, `--extension`) are CLI options, not TOML (separate from `[keyword_rules].rules`, which affects `scan`/`preview`/`start`).
 - `scan`/`preview` depth is currently top-level only.
 - `start` watcher is currently non-recursive.
 
@@ -235,4 +265,3 @@ Also update:
 - `src/config/mod.rs` (schema + serde defaults)
 - `src/config/defaults.rs` (constants/default maps as needed)
 - tests for parse/default/runtime behavior
-

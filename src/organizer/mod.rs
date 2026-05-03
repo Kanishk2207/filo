@@ -44,7 +44,11 @@ pub enum Action {
 /// Destinations are created as subfolders of `root` named after the matched
 /// category (e.g. `~/Downloads/Images/`). The source is never touched.
 pub fn plan(source: &Path, root: &Path, config: &Config) -> Result<Plan, OrganizerError> {
-    let ruleset = rules::RuleSet::new(&config.rules, &config.other_category);
+    let ruleset = rules::RuleSet::new(
+        &config.rules,
+        &config.keyword_rules.rules,
+        &config.other_category,
+    );
     let category = ruleset.category_for(source);
     let dest_dir = root.join(category);
 
