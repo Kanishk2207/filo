@@ -1,0 +1,77 @@
+name: Publish Crate
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run cargo publish --dry-run (recommended first)"
+        required: true
+        default: true
+        type: boolean
+      expected_tag:
+        description: "Optional tag to validate against Cargo.toml version (example: v0.1.0)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-crate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Read package metadata
+        id: meta
+        shell: bash
+        run: |
+          PKGID="$(cargo pkgid)"
+          PACKAGE_NAME="$(echo "$PKGID" | sed -E 's/.*#([^@]+)@.*/\1/')"
+          PACKAGE_VERSION="$(echo "$PKGID" | sed -E 's/.*@([^ ]+)$/\1/')"
+
+          echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Publishing target: $PACKAGE_NAME@$PACKAGE_VERSION"
+
+      - name: Validate expected tag
+        if: inputs.expected_tag != ''
+        shell: bash
+        run: |
+          EXPECTED="v${{ steps.meta.outputs.package_version }}"
+          PROVIDED="${{ inputs.expected_tag }}"
+          if [ "$EXPECTED" != "$PROVIDED" ]; then
+            echo "::error::Tag mismatch. Provided '$PROVIDED' but Cargo.toml expects '$EXPECTED'."
+            exit 1
+          fi
+
+      - name: Dry run publish
+        if: inputs.dry_run
+        run: cargo publish --dry-run
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$CRATES_IO_TOKEN" ]; then
+            echo "::error::Missing CRATES_IO_TOKEN repository secret."
+            exit 1
+          fi
+          cargo publish --token "$CRATES_IO_TOKEN"

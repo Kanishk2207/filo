@@ -58,6 +58,14 @@ that's the point.
 
 ## Installation
 
+### From crates.io (recommended)
+
+```bash
+cargo install filo-rs
+```
+
+The package name is `filo-rs`, and the installed command is still `filo`.
+
 ### From source
 
 Requires Rust `1.85` or newer.

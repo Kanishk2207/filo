@@ -61,6 +61,8 @@ cargo test
 `filo` follows SemVer and uses the package version in `Cargo.toml` as the source of truth.
 
 - `Cargo.toml` `[package].version` is the crate/app version.
+- crates.io package name is `filo-rs`.
+- Installed CLI command remains `filo`.
 - `filo --version` comes from that same Cargo package version.
 - Release tags should match the package version with a leading `v`.
 
@@ -76,6 +78,17 @@ Suggested release flow:
 3. After beta signoff, promote `develop` -> `main`.
 4. Bump/finalize version to `X.Y.Z` (without prerelease suffix) if needed.
 5. Tag `main` with `vX.Y.Z` and push the tag. GitHub will publish a stable release.
+
+## Publishing to crates.io
+
+- Use the dedicated `Publish Crate` workflow (manual trigger) instead of coupling crate publish to the tag release workflow.
+- Add `CRATES_IO_TOKEN` in repository secrets before first publish.
+- Run a dry run first, then run a real publish.
+
+Why separate workflows?
+
+- GitHub Release creation and crates.io publishing have different failure/retry behavior.
+- `cargo publish` is immutable per version; separating it reduces accidental publishes.
 
 ## Pull Request Checklist
 
