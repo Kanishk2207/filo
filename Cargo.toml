@@ -42,3 +42,19 @@ libc = "0.2"
 lto = true
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+maintainer = "Kanishk <kanishk0422@gmail.com>"
+copyright = "2026 Kanishk — MIT OR Apache-2.0"
+license-file = ["LICENSE", "0"]
+extended-description = """\
+filo watches your Downloads (or any) folder and organizes files into \
+predictable destinations by type and rules. Moves are safe, previewable, \
+and reversible."""
+depends = "$auto"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/filo", "usr/bin/", "755"],
+    ["readme.md", "usr/share/doc/filo/README.md", "644"],
+]
