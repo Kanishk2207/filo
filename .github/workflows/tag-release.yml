@@ -139,3 +139,93 @@ jobs:
         with:
           tag_name: ${{ needs.classify.outputs.tag }}
           files: target/debian/*.deb
+
+  bump-homebrew:
+    name: Bump Homebrew Formula
+    # Runs after the binaries are uploaded, so they exist to hash.
+    # To make Homebrew track stable releases only, change this to
+    #   needs: [classify, upload-binaries]
+    # and add:  if: needs.classify.outputs.prerelease == 'false'
+    needs: upload-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute version (strip leading v)
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: Kanishk2207/homebrew-filo
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Regenerate formula with new version and checksums
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/Kanishk2207/filo/releases/download/v${VERSION}"
+          # Download each platform archive and compute its sha256 directly,
+          # which is exactly the value Homebrew verifies against.
+          get_sha() {
+            curl -fsSL "${base}/filo-v${VERSION}-$1.tar.gz" | sha256sum | awk '{print $1}'
+          }
+          SHA_MAC_ARM="$(get_sha aarch64-apple-darwin)"
+          SHA_MAC_X86="$(get_sha x86_64-apple-darwin)"
+          SHA_LIN_ARM="$(get_sha aarch64-unknown-linux-gnu)"
+          SHA_LIN_X86="$(get_sha x86_64-unknown-linux-gnu)"
+
+          cat > tap/Formula/filo-rs.rb <<EOF
+          class FiloRs < Formula
+            desc "Your Downloads folder cleans itself — safely, predictably, and reversibly"
+            homepage "https://github.com/Kanishk2207/filo"
+            version "${VERSION}"
+            license any_of: ["MIT", "Apache-2.0"]
+
+            on_macos do
+              on_arm do
+                url "https://github.com/Kanishk2207/filo/releases/download/v#{version}/filo-v#{version}-aarch64-apple-darwin.tar.gz"
+                sha256 "${SHA_MAC_ARM}"
+              end
+              on_intel do
+                url "https://github.com/Kanishk2207/filo/releases/download/v#{version}/filo-v#{version}-x86_64-apple-darwin.tar.gz"
+                sha256 "${SHA_MAC_X86}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/Kanishk2207/filo/releases/download/v#{version}/filo-v#{version}-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LIN_ARM}"
+              end
+              on_intel do
+                url "https://github.com/Kanishk2207/filo/releases/download/v#{version}/filo-v#{version}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LIN_X86}"
+              end
+            end
+
+            def install
+              bin.install "filo"
+            end
+
+            test do
+              assert_match "filo", shell_output("#{bin}/filo --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push to tap
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/filo-rs.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date — nothing to commit."
+          else
+            git commit -m "filo-rs ${VERSION}"
+            git push
+          fi
