@@ -47,9 +47,31 @@ Users then install with:
 brew install Kanishk2207/filo/filo-rs
 ```
 
-**Tip:** once it's stable you can auto-bump the formula from the release
-workflow (an action that reads the `.sha256` assets and commits to the tap), so
-you never hand-edit hashes again.
+### Automating the Homebrew bump
+
+The `bump-homebrew` job in `.github/workflows/tag-release.yml` does steps 3–4
+for you on every release: it downloads each platform binary, computes its
+sha256, regenerates `Formula/filo-rs.rb` with the new version + hashes, and
+pushes it to the `homebrew-filo` repo. After setup you never hand-edit hashes.
+
+**One-time setup — create a token so the `filo` workflow can write to the tap:**
+
+1. GitHub → your avatar → **Settings** → **Developer settings** →
+   **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. **Resource owner:** your account (`Kanishk2207`).
+3. **Repository access:** *Only select repositories* → pick **`homebrew-filo`**.
+4. **Permissions:** Repository permissions → **Contents** → **Read and write**.
+5. Generate and copy the token (you only see it once).
+6. In the **`filo`** repo → **Settings** → **Secrets and variables** →
+   **Actions** → **New repository secret**. Name it exactly
+   **`HOMEBREW_TAP_TOKEN`** and paste the token.
+
+That's it. The default `GITHUB_TOKEN` can't write to another repo, which is why
+this separate token is needed.
+
+> By default the bump runs for **every** `v*` tag (including `develop` betas), so
+> Homebrew always has your latest build. To make Homebrew track **stable**
+> releases only, edit the `bump-homebrew` job per the comment at its top.
 
 ---
 
