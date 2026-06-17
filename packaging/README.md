@@ -14,11 +14,13 @@ tag now produces:
 | `filo-vX.Y.Z-aarch64-unknown-linux-gnu.tar.gz`  | Homebrew, AUR      |
 | `filo-vX.Y.Z-x86_64-apple-darwin.tar.gz`        | Homebrew (Intel)   |
 | `filo-vX.Y.Z-aarch64-apple-darwin.tar.gz`       | Homebrew (Apple S) |
-| `*.sha256` (one per archive)                     | checksum updates   |
+| `filo-vX.Y.Z-x86_64-pc-windows-msvc.zip`        | Scoop / WinGet     |
+| `filo-rs-X.Y.Z-x86_64.msi`                       | Windows installer  |
 | `filo-rs_X.Y.Z-1_amd64.deb`                      | apt / dpkg         |
 
-> Each archive has a matching `.sha256` file in the same release. Use those
-> values to fill the `REPLACE_WITH_..._SHA256` placeholders below.
+> To fill any `REPLACE_WITH_..._SHA256` placeholder by hand, download the archive
+> and hash it: `curl -sL <archive-url> | sha256sum`. The auto-bump jobs do this
+> for you.
 
 ---
 
@@ -136,12 +138,74 @@ Start with the direct `.deb` download; add a hosted repo later if there's demand
 
 ---
 
+## 4. Windows
+
+Two complementary options: a **double-click `.msi` installer** (the `.deb`
+analog, best for casual users) and a **Scoop** bucket (for terminal users).
+
+> Reminder: `filo` is a command-line tool. The installer puts `filo` on the
+> system PATH and adds a clean entry in "Add or remove programs", so afterwards
+> `filo` works in any Command Prompt/PowerShell — but the user still runs it from
+> a terminal. A clickable GUI would be a separate project.
+
+### 4a. Double-click installer (`.msi`)
+
+The `windows-installer` job in `tag-release.yml` builds an `.msi` with
+[`cargo-wix`](https://github.com/volks73/cargo-wix) and attaches it to every
+release. **Nothing for you to set up** — no extra repo or token. Users:
+
+1. Download `filo-rs-X.Y.Z-x86_64.msi` from the release page.
+2. Double-click → installer wizard → Finish.
+3. Open a new terminal and run `filo --version`.
+
+To uninstall, they use **Settings → Apps → Installed apps** like any program.
+
+> The first release that runs this job is the test: `.msi` builds depend on the
+> WiX toolset on the Windows runner. If it ever fails, commit a generated
+> `wix/main.wxs` (run `cargo wix init` once on a Windows machine) for full
+> control. Code-signing (to avoid the SmartScreen "unknown publisher" warning)
+> is a paid cert you can add later.
+
+### 4b. Scoop
+
+[Scoop](https://scoop.sh) is the Windows equivalent of your Homebrew tap: a
+**bucket** is a git repo full of JSON manifests that you own. It installs the
+`filo.exe` from the release `.zip` — no admin rights, no compiler needed.
+
+**One-time setup:**
+
+1. Create a new GitHub repo named **`scoop-filo`** (any name works, but
+   `scoop-<app>` is the convention). It can start empty.
+2. Create a fine-grained PAT with **Contents: Read and write** on `scoop-filo`
+   (same procedure as the Homebrew token), and add it to the **`filo`** repo as a
+   secret named **`SCOOP_BUCKET_TOKEN`**. (You can reuse the same PAT as Homebrew
+   if you grant it access to both repos.)
+3. Cut a release. The `bump-scoop` job in `tag-release.yml` computes the `.zip`
+   hash and writes `bucket/filo.json` into `scoop-filo` automatically — so the
+   bucket populates itself; you don't seed it by hand.
+
+A reference manifest lives at [`scoop/filo.json`](scoop/filo.json).
+
+**Users install with:**
+```powershell
+scoop bucket add filo https://github.com/Kanishk2207/scoop-filo
+scoop install filo
+```
+Updates: `scoop update filo`. Uninstall: `scoop uninstall filo`.
+
+> **WinGet** (`winget install`, built into Windows 11) and **Chocolatey**
+> (`choco install`) are heavier follow-ups: both require submitting a manifest
+> via PR to a central, moderated repo rather than a repo you own. Add them once
+> Scoop is proven and there's demand.
+
+---
+
 ## Release checklist
 
 1. Bump `version` in `Cargo.toml`; commit.
 2. Publish to crates.io via the **Publish Crate** workflow (or `cargo publish`).
 3. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`.
-   - `tag-release.yml` creates the GitHub Release and attaches all binaries +
-     the `.deb`.
-4. Update the Homebrew formula hashes + version → push to `homebrew-filo`.
-5. Bump the AUR `filo-bin` package (`updpkgsums`, `.SRCINFO`) → push.
+   - `tag-release.yml` creates the GitHub Release, attaches all binaries + the
+     `.deb`, and **auto-bumps Homebrew and Scoop** (given the tokens are set).
+4. Bump the AUR `filo-bin` package (`updpkgsums`, `.SRCINFO`) → push. *(Manual —
+   AUR auto-publish is a future add-on.)*
