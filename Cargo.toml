@@ -1,6 +1,7 @@
 [package]
 name = "filo-rs"
-version = "0.2.0"
+version = "0.4.1"
+authors = ["Kanishk <kanishk0422@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
 description = "Your Downloads folder cleans itself — safely, predictably, and reversibly."
@@ -42,6 +43,11 @@ libc = "0.2"
 lto = true
 codegen-units = 1
 strip = true
+
+# cargo-wix (Windows .msi) settings. The dual MIT/Apache license isn't a single
+# recognized token, so there's no EULA dialog — silence the warning about it.
+[package.metadata.wix]
+eula = false
 
 [package.metadata.deb]
 maintainer = "Kanishk <kanishk0422@gmail.com>"
