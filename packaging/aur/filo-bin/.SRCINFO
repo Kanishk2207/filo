@@ -1,0 +1,19 @@
+# Regenerate this file after editing PKGBUILD with:
+#   makepkg --printsrcinfo > .SRCINFO
+pkgbase = filo-bin
+	pkgdesc = Your Downloads folder cleans itself — safely, predictably, and reversibly
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/Kanishk2207/filo
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	license = Apache-2.0
+	provides = filo
+	conflicts = filo
+	source_x86_64 = filo-bin-0.1.0-x86_64.tar.gz::https://github.com/Kanishk2207/filo/releases/download/v0.1.0/filo-v0.1.0-x86_64-unknown-linux-gnu.tar.gz
+	sha256sums_x86_64 = REPLACE_WITH_x86_64-unknown-linux-gnu_SHA256
+	source_aarch64 = filo-bin-0.1.0-aarch64.tar.gz::https://github.com/Kanishk2207/filo/releases/download/v0.1.0/filo-v0.1.0-aarch64-unknown-linux-gnu.tar.gz
+	sha256sums_aarch64 = REPLACE_WITH_aarch64-unknown-linux-gnu_SHA256
+
+pkgname = filo-bin
