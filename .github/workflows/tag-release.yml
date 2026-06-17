@@ -97,6 +97,8 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -134,11 +136,18 @@ jobs:
       - name: Build .deb (amd64)
         run: cargo deb
 
+      # A version-less copy so the README can link a permanent download URL:
+      # https://github.com/.../releases/latest/download/filo-amd64.deb
+      - name: Create stable-named alias
+        run: cp target/debian/*_amd64.deb target/debian/filo-amd64.deb
+
       - name: Upload .deb to release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.classify.outputs.tag }}
-          files: target/debian/*.deb
+          files: |
+            target/debian/*_amd64.deb
+            target/debian/filo-amd64.deb
 
   bump-homebrew:
     name: Bump Homebrew Formula
@@ -229,3 +238,107 @@ jobs:
             git commit -m "filo-rs ${VERSION}"
             git push
           fi
+
+  bump-scoop:
+    name: Bump Scoop Manifest
+    # Same gating note as bump-homebrew applies if you want stable-only.
+    needs: upload-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute version (strip leading v)
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Scoop bucket
+        uses: actions/checkout@v6
+        with:
+          repository: Kanishk2207/scoop-filo
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          path: scoop
+
+      - name: Regenerate manifest with new version and checksum
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/Kanishk2207/filo/releases/download/v${VERSION}"
+          HASH="$(curl -fsSL "${base}/filo-v${VERSION}-x86_64-pc-windows-msvc.zip" | sha256sum | awk '{print $1}')"
+          mkdir -p scoop/bucket
+          # In the JSON, \$version is left literal so Scoop's own autoupdate can
+          # resolve it later; ${VERSION} and ${HASH} are filled in now.
+          cat > scoop/bucket/filo.json <<EOF
+          {
+              "version": "${VERSION}",
+              "description": "Your Downloads folder cleans itself — safely, predictably, and reversibly.",
+              "homepage": "https://github.com/Kanishk2207/filo",
+              "license": "MIT OR Apache-2.0",
+              "architecture": {
+                  "64bit": {
+                      "url": "${base}/filo-v${VERSION}-x86_64-pc-windows-msvc.zip",
+                      "hash": "${HASH}"
+                  }
+              },
+              "bin": "filo.exe",
+              "checkver": "github",
+              "autoupdate": {
+                  "architecture": {
+                      "64bit": {
+                          "url": "https://github.com/Kanishk2207/filo/releases/download/v\$version/filo-v\$version-x86_64-pc-windows-msvc.zip"
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Commit and push to bucket
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          cd scoop
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket/filo.json
+          if git diff --cached --quiet; then
+            echo "Manifest already up to date — nothing to commit."
+          else
+            git commit -m "filo ${VERSION}"
+            git push
+          fi
+
+  windows-installer:
+    name: Build Windows Installer (.msi)
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
+
+      # Generates wix/main.wxs from Cargo.toml metadata. The default template
+      # installs filo.exe to Program Files and adds it to the system PATH.
+      # (If you later want a custom EULA/icon, commit a hand-edited wix/main.wxs
+      # and drop this step.)
+      - name: Initialize WiX config
+        run: cargo wix init --force
+
+      - name: Build MSI
+        run: cargo wix --nocapture
+
+      # A version-less copy so the README can link a permanent download URL:
+      # https://github.com/.../releases/latest/download/filo-x86_64.msi
+      - name: Create stable-named alias
+        shell: bash
+        run: cp target/wix/*.msi target/wix/filo-x86_64.msi
+
+      - name: Upload MSI to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.classify.outputs.tag }}
+          files: |
+            target/wix/filo-rs-*.msi
+            target/wix/filo-x86_64.msi

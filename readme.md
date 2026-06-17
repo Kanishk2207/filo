@@ -58,7 +58,51 @@ that's the point.
 
 ## Installation
 
-### From crates.io (recommended)
+> `filo` is a command-line tool. After installing by any method below, run it
+> from a terminal (Command Prompt / PowerShell / Terminal). The package name on
+> crates.io is `filo-rs`; the installed command is always `filo`.
+
+### Windows
+
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20installer%20(.msi)-0078D6?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/Kanishk2207/filo/releases/latest/download/filo-x86_64.msi)
+
+Download the `.msi`, double-click it, and follow the wizard. Then open a new
+terminal and run `filo --version`. To uninstall: **Settings → Apps → Installed
+apps → filo**.
+
+Prefer a package manager? With [Scoop](https://scoop.sh):
+
+```powershell
+scoop bucket add filo https://github.com/Kanishk2207/scoop-filo
+scoop install filo
+```
+
+### Ubuntu / Debian
+
+[![Download for Ubuntu/Debian](https://img.shields.io/badge/Download-Ubuntu%2FDebian%20package%20(.deb)-E95420?logo=debian&logoColor=white&style=for-the-badge)](https://github.com/Kanishk2207/filo/releases/latest/download/filo-amd64.deb)
+
+Download the `.deb` and install it (double-click to open in Software Install, or
+from a terminal):
+
+```bash
+sudo dpkg -i ~/Downloads/filo-amd64.deb
+```
+
+To uninstall: `sudo dpkg -r filo-rs`.
+
+### macOS
+
+```bash
+brew install Kanishk2207/filo/filo-rs
+```
+
+### Arch Linux
+
+```bash
+yay -S filo-bin
+```
+
+### Any OS — from crates.io (recommended for Rust users)
 
 ```bash
 cargo install filo-rs
