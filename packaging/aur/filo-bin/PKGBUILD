@@ -1,0 +1,19 @@
+# Maintainer: Kanishk <kanishk0422@gmail.com>
+pkgname=filo-bin
+_pkgname=filo
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Your Downloads folder cleans itself — safely, predictably, and reversibly"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Kanishk2207/filo"
+license=('MIT' 'Apache-2.0')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/filo-v$pkgver-x86_64-unknown-linux-gnu.tar.gz")
+source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/filo-v$pkgver-aarch64-unknown-linux-gnu.tar.gz")
+sha256sums_x86_64=('REPLACE_WITH_x86_64-unknown-linux-gnu_SHA256')
+sha256sums_aarch64=('REPLACE_WITH_aarch64-unknown-linux-gnu_SHA256')
+
+package() {
+  install -Dm755 "$srcdir/$_pkgname" "$pkgdir/usr/bin/$_pkgname"
+}
