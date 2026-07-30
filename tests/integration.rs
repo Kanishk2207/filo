@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use filo::config::{Config, DuplicateAction, KeywordRule, KeywordRuleConfig};
+use filo::config::{Config, DestinationKind, DuplicateAction, KeywordRule, KeywordRuleConfig};
 use filo::organizer;
 
 static TMPDIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -67,10 +67,10 @@ fn keyword_rule_overrides_extension_rule() {
     write(&src, b"img");
 
     let mut cfg = test_config(&root);
-    cfg.keyword_rules.rules.push(KeywordRule {
-        to: "Documents".to_string(),
-        keywords: vec!["invoice".to_string()],
-    });
+    cfg.keyword_rules.rules.push(KeywordRule::folder(
+        "Documents",
+        vec!["invoice".to_string()],
+    ));
 
     let plan = organizer::plan(&src, &root, &cfg).unwrap();
     match plan.action {
@@ -88,10 +88,10 @@ fn keyword_rules_are_case_insensitive() {
     write(&src, b"img");
 
     let mut cfg = test_config(&root);
-    cfg.keyword_rules.rules.push(KeywordRule {
-        to: "Documents".to_string(),
-        keywords: vec!["receipt".to_string()],
-    });
+    cfg.keyword_rules.rules.push(KeywordRule::folder(
+        "Documents",
+        vec!["receipt".to_string()],
+    ));
 
     let plan = organizer::plan(&src, &root, &cfg).unwrap();
     match plan.action {
@@ -112,10 +112,10 @@ fn keyword_rules_trim_surrounding_spaces() {
     write(&src, b"img");
 
     let mut cfg = test_config(&root);
-    cfg.keyword_rules.rules.push(KeywordRule {
-        to: "Documents".to_string(),
-        keywords: vec!["  invoice  ".to_string()],
-    });
+    cfg.keyword_rules.rules.push(KeywordRule::folder(
+        "Documents",
+        vec!["  invoice  ".to_string()],
+    ));
 
     let plan = organizer::plan(&src, &root, &cfg).unwrap();
     match plan.action {
@@ -136,14 +136,13 @@ fn keyword_rule_order_decides_conflicts() {
     write(&src, b"doc");
 
     let mut cfg = test_config(&root);
-    cfg.keyword_rules.rules.push(KeywordRule {
-        to: "Amazon".to_string(),
-        keywords: vec!["amazon".to_string()],
-    });
-    cfg.keyword_rules.rules.push(KeywordRule {
-        to: "Documents".to_string(),
-        keywords: vec!["invoice".to_string()],
-    });
+    cfg.keyword_rules
+        .rules
+        .push(KeywordRule::folder("Amazon", vec!["amazon".to_string()]));
+    cfg.keyword_rules.rules.push(KeywordRule::folder(
+        "Documents",
+        vec!["invoice".to_string()],
+    ));
 
     let plan = organizer::plan(&src, &root, &cfg).unwrap();
     match plan.action {
@@ -152,6 +151,208 @@ fn keyword_rule_order_decides_conflicts() {
         }
         other => panic!("expected Move, got {:?}", other),
     }
+}
+
+// ── Path destinations (`to_type = "path"`) ─────────────────────────────
+
+#[test]
+fn path_rule_moves_outside_the_watch_root() {
+    let base = tmpdir();
+    let root = base.join("Downloads");
+    let target = base.join("personal").join("kanishk-itr");
+    let src = root.join("ITR-kanishk-2026.pdf");
+    write(&src, b"tax");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule::path(
+        target.to_str().unwrap(),
+        vec!["itr".to_string()],
+    ));
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match &plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(destination, &target.join("ITR-kanishk-2026.pdf"));
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+
+    // The destination path did not exist beforehand; executing creates it.
+    organizer::execute(&plan).unwrap();
+    assert!(!src.exists(), "source should have been moved");
+    assert_eq!(
+        fs::read(target.join("ITR-kanishk-2026.pdf")).unwrap(),
+        b"tax"
+    );
+}
+
+#[test]
+fn path_rule_accepts_a_relative_path_anchored_to_the_watch_root() {
+    let root = tmpdir();
+    let src = root.join("itr-2026.pdf");
+    write(&src, b"tax");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules
+        .rules
+        .push(KeywordRule::path("tax/2026", vec!["itr".to_string()]));
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(
+                destination,
+                root.join("tax").join("2026").join("itr-2026.pdf")
+            );
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn path_rule_expands_a_leading_tilde() {
+    let root = tmpdir();
+    let src = root.join("itr-2026.pdf");
+    write(&src, b"tax");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule::path(
+        "~/personal/kanishk-itr",
+        vec!["itr".to_string()],
+    ));
+
+    // Plan only — never execute a home-directory move from a test.
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    let destination = match plan.action {
+        organizer::Action::Move { destination } => destination,
+        other => panic!("expected Move, got {:?}", other),
+    };
+
+    let home = dirs::home_dir().expect("test host has a home directory");
+    assert_eq!(
+        destination,
+        home.join("personal")
+            .join("kanishk-itr")
+            .join("itr-2026.pdf")
+    );
+    assert!(src.exists(), "planning must not touch the source");
+}
+
+#[test]
+fn path_rule_beats_extension_routing_and_folder_rules_still_work() {
+    let base = tmpdir();
+    let root = base.join("Downloads");
+    let target = base.join("archive");
+    let itr = root.join("kanishk-itr.pdf");
+    let other = root.join("holiday.pdf");
+    write(&itr, b"tax");
+    write(&other, b"pics");
+
+    let mut cfg = test_config(&root);
+    cfg.keyword_rules.rules.push(KeywordRule::path(
+        target.to_str().unwrap(),
+        vec!["itr".to_string()],
+    ));
+
+    match organizer::plan(&itr, &root, &cfg).unwrap().action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(destination, target.join("kanishk-itr.pdf"));
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+
+    // A file that matches no keyword rule still routes by extension into the
+    // watch root, untouched by the new option.
+    match organizer::plan(&other, &root, &cfg).unwrap().action {
+        organizer::Action::Move { destination } => {
+            assert_eq!(destination, root.join("Documents").join("holiday.pdf"));
+        }
+        other => panic!("expected Move, got {:?}", other),
+    }
+}
+
+#[test]
+fn path_rule_pointing_at_the_source_folder_is_a_no_op() {
+    let root = tmpdir();
+    let src = root.join("itr-2026.pdf");
+    write(&src, b"tax");
+
+    let mut cfg = test_config(&root);
+    // Worst case: the rule resolves to the watch root itself, and duplicates
+    // are configured to move. The file must not be shunted into Duplicates.
+    cfg.duplicates.action = DuplicateAction::Move;
+    cfg.keyword_rules.rules.push(KeywordRule::path(
+        root.to_str().unwrap(),
+        vec!["itr".to_string()],
+    ));
+
+    let plan = organizer::plan(&src, &root, &cfg).unwrap();
+    match plan.action {
+        organizer::Action::AlreadyInPlace => {}
+        other => panic!("expected AlreadyInPlace, got {:?}", other),
+    }
+    organizer::execute(&plan).unwrap();
+    assert!(src.exists(), "file must stay exactly where it is");
+    assert!(!root.join("Duplicates").exists());
+}
+
+#[test]
+fn path_rules_roundtrip_through_toml() {
+    let root = tmpdir();
+    let path = root.join("config.toml");
+    let original = Config {
+        keyword_rules: KeywordRuleConfig {
+            rules: vec![
+                KeywordRule::path("~/personal/kanishk-itr", vec!["itr".to_string()]),
+                KeywordRule::folder("Amazon", vec!["amazon".to_string()]),
+            ],
+        },
+        ..Config::default()
+    };
+
+    original.save_to(&path).unwrap();
+    let raw = fs::read_to_string(&path).unwrap();
+    assert!(
+        raw.contains(r#"to_type = "path""#),
+        "path rules must be written out: {}",
+        raw
+    );
+    assert!(
+        !raw.contains(r#"to_type = "folder""#),
+        "folder is the default and should stay implicit: {}",
+        raw
+    );
+
+    let loaded = Config::load_from(&path).unwrap();
+    assert_eq!(loaded.keyword_rules, original.keyword_rules);
+}
+
+#[test]
+fn rules_without_to_type_default_to_folder() {
+    let root = tmpdir();
+    let path = root.join("config.toml");
+    fs::write(
+        &path,
+        r#"
+other_category = "Other"
+
+[keyword_rules]
+rules = [
+  { to = "Amazon", keywords = ["amazon"] },
+]
+
+[rules]
+Documents = ["pdf"]
+"#,
+    )
+    .unwrap();
+
+    let loaded = Config::load_from(&path).unwrap();
+    assert_eq!(loaded.keyword_rules.rules.len(), 1);
+    assert_eq!(
+        loaded.keyword_rules.rules[0].to_type,
+        DestinationKind::Folder
+    );
 }
 
 #[test]
@@ -284,14 +485,11 @@ fn config_roundtrips_through_toml() {
     original.duplicates.action = DuplicateAction::Move;
     original.keyword_rules = KeywordRuleConfig {
         rules: vec![
-            KeywordRule {
-                to: "Amazon".to_string(),
-                keywords: vec!["amazon".to_string()],
-            },
-            KeywordRule {
-                to: "Documents".to_string(),
-                keywords: vec!["invoice".to_string(), "receipt".to_string()],
-            },
+            KeywordRule::folder("Amazon", vec!["amazon".to_string()]),
+            KeywordRule::folder(
+                "Documents",
+                vec!["invoice".to_string(), "receipt".to_string()],
+            ),
         ],
     };
 

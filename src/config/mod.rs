@@ -32,7 +32,7 @@ pub struct Config {
     /// Ordered keyword-routing rules. Evaluated top-to-bottom.
     ///
     /// If a filename matches any keyword in a rule, that rule's `to`
-    /// category wins before extension-based routing is considered.
+    /// destination wins before extension-based routing is considered.
     #[serde(
         default,
         alias = "keyword_rule",
@@ -94,11 +94,63 @@ pub enum DuplicateAction {
     Move,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// How a rule's `to` value should be read.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DestinationKind {
+    /// `to` is a folder name, created inside the watch folder the file came
+    /// from: `<watch-root>/<to>/`. This is the historical behavior and stays
+    /// the default so existing configs are unaffected.
+    #[default]
+    Folder,
+    /// `to` is a filesystem path, independent of the watch folder. A leading
+    /// `~` expands to the home directory; a relative path is anchored to the
+    /// watch folder the file came from.
+    Path,
+}
+
+impl DestinationKind {
+    /// Used by serde to keep `to_type = "folder"` out of written configs.
+    pub fn is_folder(&self) -> bool {
+        matches!(self, DestinationKind::Folder)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct KeywordRule {
+    /// Destination folder name, or path when `to_type = "path"`.
     pub to: String,
+
+    /// Whether `to` names a folder inside the watch root or a full path.
+    #[serde(
+        default,
+        alias = "destination_type",
+        skip_serializing_if = "DestinationKind::is_folder"
+    )]
+    pub to_type: DestinationKind,
+
     #[serde(default)]
     pub keywords: Vec<String>,
+}
+
+impl KeywordRule {
+    /// Rule whose `to` is a folder name created inside the watch root.
+    pub fn folder(to: impl Into<String>, keywords: Vec<String>) -> Self {
+        Self {
+            to: to.into(),
+            to_type: DestinationKind::Folder,
+            keywords,
+        }
+    }
+
+    /// Rule whose `to` is a filesystem path outside (or inside) the watch root.
+    pub fn path(to: impl Into<String>, keywords: Vec<String>) -> Self {
+        Self {
+            to: to.into(),
+            to_type: DestinationKind::Path,
+            keywords,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]

@@ -51,8 +51,8 @@ later they're impossible to navigate. Manual cleanup is a chore nobody does.
 
 It is deliberately not clever. It does not look inside files, call machine
 learning models, or invent names. It routes by keyword/extension, dedupes by
-SHA-256, and moves things into subfolders. That's the whole product — and
-that's the point.
+SHA-256, and moves things into subfolders — or into any path you name. That's
+the whole product — and that's the point.
 
 ---
 
@@ -323,8 +323,11 @@ folder_name = "Duplicates"
 # Optional ordered keyword routing in one block (first match wins):
 [keyword_rules]
 rules = [
+  # Default: `to` is a folder name, created inside each watched folder.
   { to = "Amazon", keywords = ["amazon"] },
   { to = "Documents", keywords = ["invoice", "receipt", "statement"] },
+  # `to_type = "path"` sends matches to a path of your choosing instead.
+  { to = "~/personal/kanishk-itr", to_type = "path", keywords = ["itr"] },
 ]
 
 [rules]
@@ -338,6 +341,55 @@ Documents = ["pdf", "doc", "docx", "odt", "rtf", "txt", "md", "epub"]
 Images    = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "tiff", "heic", "avif"]
 Videos    = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"]
 ```
+
+### Sending matches to a path instead of a folder
+
+By default a keyword rule's `to` is a **folder name**. filo creates that
+folder inside whichever watched folder the file came from, so
+`to = "kanishk-itr"` lands files in `~/Downloads/kanishk-itr/`.
+
+Add `to_type = "path"` to the rule and `to` becomes a **path** instead, so
+matched files can leave the watched folder entirely:
+
+```toml
+[keyword_rules]
+rules = [
+  # ~/Downloads/kanishk-itr/  (folder inside the watched folder — the default)
+  { to = "kanishk-itr", keywords = ["itr"] },
+
+  # ~/personal/kanishk-itr/  (anywhere you like)
+  { to = "~/personal/kanishk-itr", to_type = "path", keywords = ["itr"] },
+]
+```
+
+`to_type` accepts exactly two values:
+
+| Value      | Meaning                                                              |
+|------------|----------------------------------------------------------------------|
+| `"folder"` | `to` is a folder name; destination is `<watched-folder>/<to>`. Default when `to_type` is omitted. |
+| `"path"`   | `to` is a path; destination is that path.                            |
+
+Details worth knowing:
+
+- **`~` expands** to your home directory, so one config works across machines
+  and users. `$HOME` and other environment variables are **not** expanded.
+- **Relative paths are anchored to the watched folder.** With
+  `to_type = "path"` and `to = "tax/2026"`, files from `~/Downloads` land in
+  `~/Downloads/tax/2026/` — which is how you nest more than one level deep.
+- **Missing folders are created** on the first move, including parents.
+- **Absolute paths work as written**, including Windows paths like
+  `C:\\Users\\you\\personal\\itr`.
+- **Every safety guarantee still applies.** Nothing is overwritten, duplicate
+  detection runs against the path destination, and duplicates land in
+  `<path>/Duplicates/` when `duplicates.action = "move"`.
+- **A rule pointing at the folder the file is already in is a no-op.** filo
+  reports it as `already in place` and leaves the file alone rather than
+  shuffling it around or treating it as a duplicate of itself.
+- Only keyword rules can target a path. Extension rules in `[rules]` always
+  route to a folder inside the watched folder.
+
+Run `filo preview` after editing rules — it prints the full destination path
+for every file, so you can confirm the routing before anything moves.
 
 ---
 
@@ -377,16 +429,21 @@ stops right before any file is touched. The output looks like:
 == /Users/you/Downloads ==
   move    /Users/you/Downloads/invoice.pdf  ->  /Users/you/Downloads/Documents/invoice.pdf
   move    /Users/you/Downloads/cat.jpg      ->  /Users/you/Downloads/Images/cat.jpg
+  move    /Users/you/Downloads/ITR-2026.pdf ->  /Users/you/personal/kanishk-itr/ITR-2026.pdf
   skip    /Users/you/Downloads/cat-copy.jpg (duplicate of /Users/you/Downloads/Images/cat.jpg)
   dup ->  /Users/you/Downloads/old.pdf      ->  /Users/you/Downloads/Documents/Duplicates/old.pdf (duplicate of ...)
 
-Preview summary (4 files examined):
-  would move:               2
+Preview summary (5 files examined):
+  would move:               3
   would skip (duplicate):   1
   would move to Duplicates: 1
 
 No changes were made. Run `filo scan` to apply.
 ```
+
+Destinations are always printed in full, so a `to_type = "path"` rule shows
+exactly where the file leaves for. A file whose rule resolves to the folder it
+already sits in shows as `keep` and is counted under `already in place`.
 
 Because the planner is pure, you can:
 

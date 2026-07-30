@@ -40,6 +40,9 @@ WATCH_B=""
 WATCH_C=""
 ARRANGE_SRC=""
 ARRANGE_DEST=""
+# Destination of a `to_type = "path"` keyword rule. Deliberately outside every
+# watched folder, and deliberately not pre-created — filo must create it.
+PATH_DEST=""
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -161,8 +164,10 @@ backup_existing_config() {
 write_comprehensive_config() {
   local watch_a_esc
   local watch_b_esc
+  local path_dest_esc
   watch_a_esc="$(toml_escape "${WATCH_A}")"
   watch_b_esc="$(toml_escape "${WATCH_B}")"
+  path_dest_esc="$(toml_escape "${PATH_DEST}")"
 
   # Keep this section as the single source of truth for evolving feature tests.
   cat > "${CONFIG_PATH}" <<EOF
@@ -188,6 +193,11 @@ folder_name = "Duplicates"
 
 [keyword_rules]
 rules = [
+  # Absolute path destination, outside every watched folder.
+  { to = "${path_dest_esc}", to_type = "path", keywords = ["itr"] },
+  # Relative path destination, anchored to whichever folder the file came from.
+  { to = "nested/tax", to_type = "path", keywords = ["form16"] },
+  # Folder destinations (the default) must keep working unchanged.
   { to = "Amazon", keywords = ["amazon"] },
   { to = "Finance", keywords = ["invoice", "receipt", "statement"] },
   { to = "Travel", keywords = ["ticket", "boarding"] },
@@ -331,6 +341,10 @@ seed_scan_fixtures() {
   printf 'fixture-b\n' > "${WATCH_A}/Monthly_receipt.png"
   printf 'fixture-c\n' > "${WATCH_A}/plain_photo.JPG"
 
+  # Path-destination assertions (to_type = "path").
+  printf 'fixture-itr\n' > "${WATCH_A}/kanishk_itr_2026.pdf"
+  printf 'fixture-form16\n' > "${WATCH_A}/form16_summary.pdf"
+
   # Duplicate handling assertions (action = move).
   printf 'fixture-dup\n' > "${WATCH_A}/dup_source_one.pdf"
   printf 'fixture-dup\n' > "${WATCH_A}/dup_source_two.pdf"
@@ -376,6 +390,8 @@ main() {
   WATCH_C="$(cd "${WATCH_C}" && pwd -P)"
   ARRANGE_SRC="$(cd "${ARRANGE_SRC}" && pwd -P)"
   ARRANGE_DEST="$(cd "${ARRANGE_DEST}" && pwd -P)"
+  # Left uncreated on purpose: the first move must create it.
+  PATH_DEST="$(cd "${TEST_ROOT}" && pwd -P)/external_itr"
 
   log "1) Uninstall existing filo binary (if present)"
   cargo uninstall filo >/dev/null 2>&1 || true
@@ -410,6 +426,12 @@ main() {
   assert_file "${WATCH_A}/Amazon/amazon-invoice-may.pdf"
   assert_file "${WATCH_A}/Finance/monthly-receipt.png"
   assert_file "${WATCH_A}/Images/plain-photo.jpg"
+
+  # Path destinations: absolute path outside the watch root, created on demand.
+  assert_dir "${PATH_DEST}"
+  assert_file "${PATH_DEST}/kanishk-itr-2026.pdf"
+  # Relative path destination, anchored to the watched folder it came from.
+  assert_file "${WATCH_A}/nested/tax/form16-summary.pdf"
   local dup_primary_count dup_duplicate_count
   dup_primary_count="$(find "${WATCH_A}/Documents" -maxdepth 1 -type f \( -name 'dup-source-one*.pdf' -o -name 'dup-source-two*.pdf' \) | wc -l | tr -d ' ')"
   dup_duplicate_count="$(find "${WATCH_A}/Documents/Duplicates" -maxdepth 1 -type f \( -name 'dup-source-one*.pdf' -o -name 'dup-source-two*.pdf' \) | wc -l | tr -d ' ')"
@@ -467,12 +489,17 @@ main() {
   printf 'live-amazon\n' > "${WATCH_B}/amazon_invoice_live.pdf"
   printf 'live-dup\n' > "${WATCH_B}/live_dup_one.pdf"
   printf 'live-dup\n' > "${WATCH_B}/live_dup_two.pdf"
+  # Same absolute path rule, this time from the *other* watched folder.
+  printf 'live-itr\n' > "${WATCH_B}/kanishk_itr_live.pdf"
 
   generate_bulk_files "${WATCH_A}" "live_a" "${LIVE_COUNT}"
   generate_bulk_files "${WATCH_B}" "live_b" "${LIVE_COUNT}"
 
   wait_for_file "${WATCH_B}/Amazon/amazon-invoice-live.pdf" 120 || {
     die "Watcher did not route amazon_invoice_live.pdf as expected"
+  }
+  wait_for_file "${PATH_DEST}/kanishk-itr-live.pdf" 120 || {
+    die "Watcher did not route kanishk_itr_live.pdf to the path destination ${PATH_DEST}"
   }
   wait_for_match_count "${WATCH_B}/Documents" 'live-dup-*.pdf' 1 120 || {
     die "Watcher did not place any live duplicate in Documents"
@@ -535,6 +562,8 @@ main() {
   assert_dir "${WATCH_B}/Amazon"
   assert_dir "${WATCH_B}/Finance"
   assert_dir "${WATCH_B}/Documents"
+  assert_dir "${PATH_DEST}"
+  assert_dir "${WATCH_A}/nested/tax"
 
   log "All comprehensive checks passed."
   printf '\nSummary:\n'

@@ -35,6 +35,7 @@ pub fn run(config: &Config, rename_override: bool) -> Result<()> {
 
     let mut moved = 0usize;
     let mut skipped_dup = 0usize;
+    let mut in_place = 0usize;
     let mut errors = 0usize;
 
     for (root, file) in files {
@@ -48,6 +49,7 @@ pub fn run(config: &Config, rename_override: bool) -> Result<()> {
         match process_one(&root, &file, &config) {
             Ok(Outcome::Moved) => moved += 1,
             Ok(Outcome::Skipped) => skipped_dup += 1,
+            Ok(Outcome::AlreadyInPlace) => in_place += 1,
             Err(e) => {
                 // Per the safety rules, a single file error must not crash
                 // the whole run. Log and continue.
@@ -65,12 +67,16 @@ pub fn run(config: &Config, rename_override: bool) -> Result<()> {
         "Scan complete: {} moved, {} skipped (duplicates), {} errors",
         moved, skipped_dup, errors
     );
+    if in_place > 0 {
+        println!("  {} already in their destination folder", in_place);
+    }
     Ok(())
 }
 
 enum Outcome {
     Moved,
     Skipped,
+    AlreadyInPlace,
 }
 
 fn process_one(
@@ -105,6 +111,13 @@ fn process_one(
                 of.display()
             );
             Ok(Outcome::Skipped)
+        }
+        organizer::Action::AlreadyInPlace => {
+            log::info!(
+                "scan left in place: {} is already in its destination folder",
+                plan.source.display()
+            );
+            Ok(Outcome::AlreadyInPlace)
         }
     }
 }

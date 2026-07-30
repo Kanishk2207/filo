@@ -45,6 +45,7 @@ folder_name = "Duplicates"
 # rules = [
 #   { to = "Amazon", keywords = ["amazon"] },
 #   { to = "Documents", keywords = ["invoice", "receipt", "statement"] },
+#   { to = "~/personal/kanishk-itr", to_type = "path", keywords = ["itr"] },
 # ]
 
 [rules]
@@ -71,6 +72,9 @@ Videos    = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"]
 | `duplicates.action` | `"skip" \| "move"` | `"skip"` | `scan`, `preview`, `start` |
 | `duplicates.folder_name` | `string` | `"Duplicates"` | `scan`, `preview`, `start` (when `duplicates.action="move"`) |
 | `keyword_rules.rules` | `array<table>` | `[]` | `scan`, `preview`, `start` |
+| `keyword_rules.rules[].to` | `string` | (required) | `scan`, `preview`, `start` |
+| `keyword_rules.rules[].to_type` | `"folder" \| "path"` | `"folder"` | `scan`, `preview`, `start` |
+| `keyword_rules.rules[].keywords` | `array<string>` | `[]` | `scan`, `preview`, `start` |
 | `rules.<Category>` | `array<string(extension)>` | built-in per category | `scan`, `preview`, `start` |
 
 ## Detailed reference
@@ -198,12 +202,63 @@ All fields in this section are ignored unless `rename.enabled = true`.
   - Empty `to` values and empty keywords are ignored.
   - If no keyword rule matches, routing falls through to `[rules]`.
 - Rule fields:
-  - `to` (`string`): destination category/folder name.
+  - `to` (`string`): destination folder name, or path when `to_type = "path"`.
+  - `to_type` (`"folder" | "path"`): how to read `to`. See below.
   - `keywords` (`array<string>`): match keywords for that rule.
 - Example:
   `[keyword_rules]` with
   `rules = [{ to = "Documents", keywords = ["invoice", "receipt"] }]`
   routes `May_RECEIPT.png` to `Documents` with first-match precedence.
+
+#### `keyword_rules.rules[].to_type`
+
+- Type: enum string
+- Allowed values: `"folder"`, `"path"`
+- Default: `"folder"`
+- Also accepted as: `destination_type` (alias)
+- Meaning:
+  Whether the rule's `to` value is a folder name to create inside the watch
+  root, or a filesystem path of its own.
+- Runtime behavior:
+  - `"folder"`: destination is `<watch-root>/<to>/`. Unchanged historical
+    behavior, applied whenever `to_type` is absent.
+  - `"path"`: destination is `to` itself, resolved as follows:
+    1. A leading `~` (or `~\` on Windows) expands to the home directory. A
+       `~` anywhere else in the string is left literal. Environment variables
+       are never expanded.
+    2. If the result is absolute, it is used as-is.
+    3. If the result is still relative, it is joined onto the watch root —
+       so `to = "tax/2026"` from `~/Downloads` means `~/Downloads/tax/2026/`.
+  - Missing destination directories (including parents) are created on the
+    first move, not at config load.
+  - Duplicate detection, collision-safe naming, and
+    `duplicates.action = "move"` all operate on the resolved destination, so
+    duplicates land in `<resolved-path>/<duplicates.folder_name>/`.
+  - If a rule resolves to the directory the file already sits in, the file is
+    left untouched and reported as `already in place` (`keep` in `preview`).
+    This is checked against resolved paths, so symlinked and `.`-laden
+    spellings of the same directory are recognized.
+  - Only keyword rules support `to_type`. Extension rules in `[rules]` and the
+    `other_category` fallback always route to a folder under the watch root.
+- Notes:
+  - `to_type = "folder"` is never written back to disk by `filo init`, since
+    it is the default. Existing configs keep working with no edits.
+  - `~` expansion needs a discoverable home directory. If there is none, the
+    `~` stays literal and a warning is logged, which surfaces as a folder
+    actually named `~`.
+- Example:
+  ```toml
+  [keyword_rules]
+  rules = [
+    { to = "~/personal/kanishk-itr", to_type = "path", keywords = ["itr"] },
+    { to = "/mnt/archive/scans", to_type = "path", keywords = ["scan"] },
+    { to = "tax/2026", to_type = "path", keywords = ["form16"] },
+    { to = "Amazon", keywords = ["amazon"] },
+  ]
+  ```
+  Watching `~/Downloads`, `ITR-kanishk-2026.pdf` moves to
+  `~/personal/kanishk-itr/`, `form16.pdf` to `~/Downloads/tax/2026/`, and
+  `amazon-order.pdf` to `~/Downloads/Amazon/`.
 
 ### `[rules]`
 
@@ -237,6 +292,8 @@ These are the built-in defaults used when no custom rules are set:
 - `arrange` command filters (`--keyword`, `--extension`) are CLI options, not TOML (separate from `[keyword_rules].rules`, which affects `scan`/`preview`/`start`).
 - `scan`/`preview` depth is currently top-level only.
 - `start` watcher is currently non-recursive.
+- Keyword rules match on filename keywords only. Matching a keyword *and* an extension in one rule is not expressible in TOML today; use `filo arrange -k <keyword> -e <ext> -d <path>` for that.
+- Path destinations are not watched implicitly. If you want files that land in a `to_type = "path"` destination to be organized further, add that path to `watch.folders` yourself.
 
 ## Extending this document for future TOML options
 
