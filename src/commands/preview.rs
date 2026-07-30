@@ -16,6 +16,7 @@ pub fn run(config: &Config) -> Result<()> {
     let mut moves = 0usize;
     let mut dup_skip = 0usize;
     let mut dup_move = 0usize;
+    let mut in_place = 0usize;
     let mut errors = 0usize;
 
     for folder in &config.watch.folders {
@@ -66,6 +67,13 @@ pub fn run(config: &Config) -> Result<()> {
                         );
                         dup_move += 1;
                     }
+                    organizer::Action::AlreadyInPlace => {
+                        println!(
+                            "  keep    {}  (its rule points at the folder it is already in)",
+                            plan.source.display()
+                        );
+                        in_place += 1;
+                    }
                 },
                 Err(e) => {
                     println!("  error   {}: {}", entry.path().display(), e);
@@ -80,6 +88,9 @@ pub fn run(config: &Config) -> Result<()> {
     println!("  would move:               {}", moves);
     println!("  would skip (duplicate):   {}", dup_skip);
     println!("  would move to Duplicates: {}", dup_move);
+    if in_place > 0 {
+        println!("  already in place:         {}", in_place);
+    }
     if errors > 0 {
         println!("  errors:                   {}", errors);
     }

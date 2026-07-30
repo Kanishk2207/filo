@@ -212,6 +212,12 @@ fn announce(plan: &organizer::Plan) {
                 of.display()
             );
         }
+        organizer::Action::AlreadyInPlace => {
+            log::info!(
+                "left in place: {} is already in its destination folder",
+                plan.source.display()
+            );
+        }
     }
 }
 
