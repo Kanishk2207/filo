@@ -30,27 +30,45 @@ pub struct Plan {
 
 #[derive(Debug, Clone)]
 pub enum Action {
-    /// Move `source` into the category destination. Guaranteed non-colliding.
+    /// Move `source` into the resolved destination. Guaranteed non-colliding.
     Move { destination: PathBuf },
     /// `source` is a byte-identical duplicate of `of`; leave it where it is.
     SkipDuplicate { of: PathBuf },
     /// `source` is a duplicate of `of`; route it to the dedicated duplicates
-    /// subfolder instead of the regular category destination.
+    /// subfolder instead of the regular destination.
     MoveDuplicate { destination: PathBuf, of: PathBuf },
+    /// The matched rule resolves to the directory `source` already sits in,
+    /// so there is nothing to do. Only reachable via path destinations (a
+    /// folder destination is always a subfolder of the watch root).
+    AlreadyInPlace,
 }
 
 /// Compute a plan for `source`, whose containing watch folder is `root`.
 ///
-/// Destinations are created as subfolders of `root` named after the matched
-/// category (e.g. `~/Downloads/Images/`). The source is never touched.
+/// By default destinations are subfolders of `root` named after the matched
+/// category (e.g. `~/Downloads/Images/`). A keyword rule with
+/// `to_type = "path"` instead sends matches to a path of its own, anywhere on
+/// disk (e.g. `~/personal/kanishk-itr/`). Either way the source is never
+/// touched until `execute`.
 pub fn plan(source: &Path, root: &Path, config: &Config) -> Result<Plan, OrganizerError> {
     let ruleset = rules::RuleSet::new(
         &config.rules,
         &config.keyword_rules.rules,
         &config.other_category,
     );
-    let category = ruleset.category_for(source);
-    let dest_dir = root.join(category);
+    let route = ruleset.route_for(source);
+    let dest_dir = rules::resolve_destination(&route, root);
+
+    // A path rule can name the directory the file is already in. Moving a
+    // file onto itself would otherwise read as a duplicate of itself and,
+    // under `duplicates.action = "move"`, shunt it into a Duplicates
+    // subfolder. Leave it alone instead.
+    if is_same_dir(&dest_dir, source.parent()) {
+        return Ok(Plan {
+            source: source.to_path_buf(),
+            action: Action::AlreadyInPlace,
+        });
+    }
 
     let (stem, ext) = split_stem_ext(source);
     let final_stem = if config.rename.enabled {
@@ -89,7 +107,24 @@ pub fn execute(plan: &Plan) -> Result<(), OrganizerError> {
     match &plan.action {
         Action::Move { destination } => mover::safe_move(&plan.source, destination),
         Action::MoveDuplicate { destination, .. } => mover::safe_move(&plan.source, destination),
-        Action::SkipDuplicate { .. } => Ok(()),
+        Action::SkipDuplicate { .. } | Action::AlreadyInPlace => Ok(()),
+    }
+}
+
+/// Whether `a` and `b` are the same directory on disk.
+///
+/// Compares resolved paths when both exist, so `~/Downloads` and a symlink
+/// or `.`-laden spelling of it are recognized as one directory. Falls back to
+/// a literal comparison when either side cannot be resolved (for example a
+/// destination that has not been created yet).
+fn is_same_dir(a: &Path, b: Option<&Path>) -> bool {
+    let Some(b) = b else { return false };
+    if a == b {
+        return true;
+    }
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
     }
 }
 
