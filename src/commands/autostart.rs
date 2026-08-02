@@ -99,6 +99,16 @@ pub fn disable() -> Result<()> {
     Ok(())
 }
 
+/// Whether the login service is currently installed.
+///
+/// Lets callers (notably `filo init`) skip a redundant enable, which on
+/// macOS would fail outright because `launchctl load` rejects an
+/// already-loaded service.
+#[cfg(target_os = "macos")]
+pub fn is_enabled() -> bool {
+    plist_path().map(|p| p.exists()).unwrap_or(false)
+}
+
 #[cfg(target_os = "macos")]
 pub fn status() -> Result<()> {
     let path = plist_path()?;
@@ -192,6 +202,13 @@ pub fn disable() -> Result<()> {
     Ok(())
 }
 
+/// Whether the login service is currently installed. See the macOS
+/// implementation for why callers need this.
+#[cfg(target_os = "linux")]
+pub fn is_enabled() -> bool {
+    unit_path().map(|p| p.exists()).unwrap_or(false)
+}
+
 #[cfg(target_os = "linux")]
 pub fn status() -> Result<()> {
     let path = unit_path()?;
@@ -231,10 +248,22 @@ pub fn enable() -> Result<()> {
 
     if status.success() {
         println!("Autostart enabled. filo will start on login.");
+        println!("  registry: {}\\filo", REG_KEY);
     } else {
         anyhow::bail!("reg add failed (exit {})", status);
     }
     Ok(())
+}
+
+/// Whether the login service is currently installed. See the macOS
+/// implementation for why callers need this.
+#[cfg(target_os = "windows")]
+pub fn is_enabled() -> bool {
+    std::process::Command::new("reg")
+        .args(["query", REG_KEY, "/v", "filo"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 #[cfg(target_os = "windows")]

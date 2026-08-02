@@ -6,11 +6,12 @@
 
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect, Select};
 
-use crate::commands::scan;
+use crate::commands::{autostart, scan};
 use crate::config::{Config, DuplicateAction};
 use crate::daemon;
 
@@ -69,12 +70,25 @@ pub fn run() -> Result<()> {
         .default(true)
         .interact()?;
 
+    // Asked alongside the other questions so the user decides everything up
+    // front, but acted on further down: installing the login service starts a
+    // watcher that reads the config, so the config has to be on disk first.
+    let want_autostart = Confirm::with_theme(&theme)
+        .with_prompt("Start filo automatically on system startup/login?")
+        .default(false)
+        .interact()?;
+
     let path = config.save().context("saving config")?;
     println!();
     println!("Config saved to: {}", path.display());
     println!("Run `filo preview` to see planned moves, `filo scan` to organize existing files,");
     println!("or `filo start` to begin watching.");
+    if !want_autostart {
+        println!("To start filo on every login later, run `filo autostart enable`.");
+    }
 
+    // The initial scan runs before anything starts watching, so a one-shot
+    // scan and a freshly launched watcher never race over the same files.
     if config.watch.auto_start {
         println!();
         let scan_first = Confirm::with_theme(&theme)
@@ -83,18 +97,101 @@ pub fn run() -> Result<()> {
             .interact()?;
         if scan_first {
             scan::run(&config, false).context("running initial scan before watcher start")?;
-            println!();
-        }
-        daemon::spawn_daemon().context("starting daemon")?;
-        match daemon::running_pid() {
-            Some(pid) => println!(
-                "Watcher started in background (PID {}). Use `filo stop` to stop it.",
-                pid
-            ),
-            None => println!("Watcher started in background. Use `filo stop` to stop it."),
         }
     }
 
+    // launchd and systemd start the watcher the moment the service is
+    // installed, so find out whether that happened before deciding to start
+    // one here.
+    let mut watcher_pid = None;
+    if want_autostart {
+        println!();
+        if install_autostart() {
+            watcher_pid = wait_for_watcher(Duration::from_secs(2));
+            if let Some(pid) = watcher_pid {
+                println!("  It also started the watcher now (PID {}).", pid);
+            }
+        }
+    }
+
+    if config.watch.auto_start {
+        println!();
+        match watcher_pid {
+            Some(pid) => println!(
+                "Watcher is already running (PID {}). Use `filo stop` to stop it.",
+                pid
+            ),
+            None => start_watcher()?,
+        }
+    }
+
+    Ok(())
+}
+
+/// Install the OS login service, reporting rather than propagating failure.
+/// Returns whether the service was installed by this call.
+///
+/// By this point the config is already written and setup has essentially
+/// succeeded, so a service manager that refuses to cooperate must not abort
+/// the wizard. The user gets the error and the exact command to retry.
+fn install_autostart() -> bool {
+    if autostart::is_enabled() {
+        println!("Autostart is already enabled; leaving it as it is.");
+        return false;
+    }
+    // `autostart::enable` prints its own success line, including where the
+    // service was installed.
+    match autostart::enable() {
+        Ok(()) => true,
+        Err(e) => {
+            println!("Could not enable autostart: {:#}", e);
+            println!("  Setup is otherwise complete. To retry, run: filo autostart enable");
+            false
+        }
+    }
+}
+
+/// Wait briefly for a just-installed login service to bring the watcher up.
+///
+/// The PID file only appears once the watcher process is running, so checking
+/// immediately after `launchctl load` or `systemctl enable --now` usually
+/// loses the race. Returns `None` on Windows, where the registry Run key
+/// takes effect at the next login rather than now.
+fn wait_for_watcher(timeout: Duration) -> Option<u32> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(pid) = daemon::running_pid() {
+            return Some(pid);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Start the background watcher, unless something already started one.
+///
+/// On macOS and Linux, installing the login service starts the watcher
+/// immediately, so spawning another here would be a second watcher on the
+/// same folders (and `spawn_daemon` would fail outright).
+fn start_watcher() -> Result<()> {
+    if let Some(pid) = daemon::running_pid() {
+        println!(
+            "Watcher is already running (PID {}). Use `filo stop` to stop it.",
+            pid
+        );
+        return Ok(());
+    }
+
+    daemon::spawn_daemon().context("starting daemon")?;
+    match daemon::running_pid() {
+        Some(pid) => println!(
+            "Watcher started in background (PID {}). Use `filo stop` to stop it.",
+            pid
+        ),
+        None => println!("Watcher started in background. Use `filo stop` to stop it."),
+    }
     Ok(())
 }
 
