@@ -113,6 +113,12 @@ Videos    = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"]
   After `filo init` writes config, automatically start watcher mode.
 - Runtime behavior:
   Used only by `filo init`.
+- Notes:
+  This is a one-time action for the current session, not startup behavior.
+  It does not survive a reboot. Starting filo on every login is a separate
+  choice, offered as its own prompt in `filo init` and available any time as
+  `filo autostart enable`. That setting lives in the OS service manager, not
+  in this file.
 
 #### `watch.debounce_ms`
 
@@ -294,6 +300,7 @@ These are the built-in defaults used when no custom rules are set:
 - `start` watcher is currently non-recursive.
 - Keyword rules match on filename keywords only. Matching a keyword *and* an extension in one rule is not expressible in TOML today; use `filo arrange -k <keyword> -e <ext> -d <path>` for that.
 - Path destinations are not watched implicitly. If you want files that land in a `to_type = "path"` destination to be organized further, add that path to `watch.folders` yourself.
+- OS autostart (start filo on login) has no TOML key. It is a launchd plist, systemd user unit, or Windows registry Run key, installed by `filo autostart enable` or by answering yes to the autostart prompt in `filo init`. Query it with `filo autostart status`. Do not confuse it with `watch.auto_start`.
 
 ## Extending this document for future TOML options
 

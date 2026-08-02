@@ -155,6 +155,12 @@ filo init
    or `move` (relocate it to a `Duplicates` subfolder next to the category).
 4. **Start watching now?** If yes, `filo` jumps straight into `start` mode
    when setup ends.
+5. **Start filo on system startup/login?** Default: off. If yes, the wizard
+   installs the OS login service for you (launchd on macOS, systemd on Linux,
+   a registry Run key on Windows) and prints where it was installed, so you
+   never have to discover `filo autostart enable` on your own. If the service
+   manager refuses, setup still finishes and prints the exact command to
+   retry. Say no and nothing changes; you can enable it any time later.
 
 The wizard writes `config.toml` to the platform config directory
 (see [Config file](#config-file)). You can re-run `filo init` any time to
@@ -223,6 +229,11 @@ filo autostart enable      # macOS: launchd | Linux: systemd | Windows: registry
 filo autostart disable
 filo autostart status
 ```
+
+`filo init` offers this as a prompt, so you usually never need to run
+`enable` by hand. These commands remain the way to change your mind later.
+On macOS and Linux, enabling also starts the watcher right away; on Windows
+it takes effect at your next login.
 
 ### Examples
 
@@ -299,6 +310,8 @@ folders = [
   "/home/you/Desktop",
 ]
 # If true, `filo init` launches `filo start` automatically after setup.
+# This is a one-off for that session, not startup behavior. To run filo on
+# every login, use `filo autostart enable` (or say yes when init asks).
 auto_start = false
 # How long (milliseconds) a file must sit idle before filo acts on it.
 # Protects against operating on files that are still downloading.
